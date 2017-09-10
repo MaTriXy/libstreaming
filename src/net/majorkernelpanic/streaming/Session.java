@@ -1,21 +1,19 @@
 /*
- * Copyright (C) 2011-2014 GUIGUI Simon, fyhertz@gmail.com
- * 
+ * Copyright (C) 2011-2015 GUIGUI Simon, fyhertz@gmail.com
+ *
  * This file is part of libstreaming (https://github.com/fyhertz/libstreaming)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * Spydroid is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * This source code is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this source code; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package net.majorkernelpanic.streaming;
@@ -24,7 +22,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.CountDownLatch;
-
 import net.majorkernelpanic.streaming.audio.AudioQuality;
 import net.majorkernelpanic.streaming.audio.AudioStream;
 import net.majorkernelpanic.streaming.exceptions.CameraInUseException;
@@ -73,7 +70,7 @@ public class Session {
 	/** Some app is already using a camera (Camera.open() has failed). */
 	public final static int ERROR_CAMERA_ALREADY_IN_USE = 0x00;
 
-	/** The phone may not support some streaming parameters that you are using (bit rate, frame rate...s). */
+	/** The phone may not support some streaming parameters that you are trying to use (bit rate, frame rate, resolution...). */
 	public final static int ERROR_CONFIGURATION_NOT_SUPPORTED = 0x01;
 
 	/** 
@@ -111,35 +108,22 @@ public class Session {
 
 	private Callback mCallback;
 	private Handler mMainHandler;
-	
-	private static CountDownLatch sSignal;
-	private static Handler sHandler;
 
-	static {
-		// Creates the Thread that will be used when asynchronous methods of a Session are called
-		sSignal = new CountDownLatch(1);
-		new HandlerThread("net.majorkernelpanic.streaming.Session"){
-			@Override
-			protected void onLooperPrepared() {
-				sHandler = new Handler();
-				sSignal.countDown();
-			}
-		}.start();
-	}
-	
+	private Handler mHandler;
+
 	/** 
 	 * Creates a streaming session that can be customized by adding tracks.
 	 */
 	public Session() {
 		long uptime = System.currentTimeMillis();
+
+		HandlerThread thread = new HandlerThread("net.majorkernelpanic.streaming.Session");
+		thread.start();
+
+		mHandler = new Handler(thread.getLooper());
 		mMainHandler = new Handler(Looper.getMainLooper());
 		mTimestamp = (uptime/1000)<<32 & (((uptime-((uptime/1000)*1000))>>32)/1000); // NTP timestamp
 		mOrigin = "127.0.0.1";
-		
-		// Me make sure that we won't send Runnables to a non existing thread
-		try {
-			sSignal.await();
-		} catch (InterruptedException e) {}
 	}
 
 	/**
@@ -152,7 +136,7 @@ public class Session {
 		 * Called periodically to inform you on the bandwidth 
 		 * consumption of the streams when streaming. 
 		 */
-		public void onBitrareUpdate(long bitrate);
+		public void onBitrateUpdate(long bitrate);
 
 		/** Called when some error occurs. */
 		public void onSessionError(int reason, int streamType, Exception e);
@@ -279,7 +263,7 @@ public class Session {
 	 * effect next time you call {@link #start()} or {@link #startPreview()}.
 	 */
 	public void setSurfaceView(final SurfaceView view) {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				if (mVideoStream != null) {
@@ -300,7 +284,7 @@ public class Session {
 			mVideoStream.setPreviewOrientation(orientation);
 		}
 	}	
-	
+
 	/** 
 	 * Sets the configuration of the stream. <br />
 	 * You can call this method at any time and changes will take 
@@ -312,7 +296,7 @@ public class Session {
 			mAudioStream.setAudioQuality(quality);
 		}
 	}
-	
+
 	/**
 	 * Returns the {@link Callback} interface that was set with 
 	 * {@link #setCallback(Callback)} or null if none was set.
@@ -364,20 +348,17 @@ public class Session {
 		if (mVideoStream != null) sum += mVideoStream.getBitrate();
 		return sum;
 	}
-	
+
 	/** Indicates if a track is currently running. */
 	public boolean isStreaming() {
-		if ( (mAudioStream!=null && mAudioStream.isStreaming()) || (mVideoStream!=null && mVideoStream.isStreaming()) )
-			return true;
-		else 
-			return false;
+		return (mAudioStream!=null && mAudioStream.isStreaming()) || (mVideoStream!=null && mVideoStream.isStreaming());
 	}
 
 	/** 
 	 * Configures all streams of the session.
 	 **/
 	public void configure() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -434,7 +415,7 @@ public class Session {
 	 * Asynchronously starts all streams of the session.
 	 **/
 	public void start() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -456,7 +437,7 @@ public class Session {
 			InvalidSurfaceException, 
 			UnknownHostException,
 			IOException {
-		
+
 		Stream stream = id==0 ? mAudioStream : mVideoStream;
 		if (stream!=null && !stream.isStreaming()) {
 			try {
@@ -468,7 +449,7 @@ public class Session {
 					postSessionStarted();
 				}
 				if (getTrack(1-id) == null || !getTrack(1-id).isStreaming()) {
-					sHandler.post(mUpdateBitrate);
+					mHandler.post(mUpdateBitrate);
 				}
 			} catch (UnknownHostException e) {
 				postError(ERROR_UNKNOWN_HOST, id, e);
@@ -523,7 +504,7 @@ public class Session {
 
 	/** Stops all existing streams. */
 	public void stop() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				syncStop();
@@ -541,7 +522,7 @@ public class Session {
 			stream.stop();
 		}
 	}		
-	
+
 	/** Stops all existing streams in a synchronous manner. */
 	public void syncStop() {
 		syncStop(0);
@@ -556,14 +537,14 @@ public class Session {
 	 * callback will be called with {@link #ERROR_INVALID_SURFACE}.
 	 */
 	public void startPreview() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				if (mVideoStream != null) {
 					try {
-						mVideoStream.configure();
 						mVideoStream.startPreview();
 						postPreviewStarted();
+						mVideoStream.configure();
 					} catch (CameraInUseException e) {
 						postError(ERROR_CAMERA_ALREADY_IN_USE , STREAM_VIDEO, e);
 					} catch (ConfNotSupportedException e) {
@@ -586,7 +567,7 @@ public class Session {
 	 * Asynchronously stops the camera preview.
 	 */
 	public void stopPreview() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				if (mVideoStream != null) {
@@ -602,7 +583,7 @@ public class Session {
 	 * To find out which camera is currently selected, use {@link #getCamera()}
 	 **/
 	public void switchCamera() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				if (mVideoStream != null) {
@@ -626,7 +607,7 @@ public class Session {
 	}
 
 	/**
-	 * Returns the id of the camera currently selected.
+	 * Returns the id of the camera currently selected. <br />
 	 * It can be either {@link CameraInfo#CAMERA_FACING_BACK} or 
 	 * {@link CameraInfo#CAMERA_FACING_FRONT}.
 	 */
@@ -641,7 +622,7 @@ public class Session {
 	 * {@link Session#getVideoTrack()} and {@link VideoStream#getFlashState()}.
 	 **/
 	public void toggleFlash() {
-		sHandler.post(new Runnable() {
+		mHandler.post(new Runnable() {
 			@Override
 			public void run() {
 				if (mVideoStream != null) {
@@ -659,7 +640,7 @@ public class Session {
 	public void release() {
 		removeAudioTrack();
 		removeVideoTrack();
-		sHandler.getLooper().quit();
+		mHandler.getLooper().quit();
 	}
 
 	private void postPreviewStarted() {
@@ -722,7 +703,7 @@ public class Session {
 			@Override
 			public void run() {
 				if (mCallback != null) {
-					mCallback.onBitrareUpdate(bitrate);
+					mCallback.onBitrateUpdate(bitrate);
 				}
 			}
 		});
@@ -733,7 +714,7 @@ public class Session {
 		public void run() {
 			if (isStreaming()) { 
 				postBitRate(getBitrate());
-				sHandler.postDelayed(mUpdateBitrate, 500);
+				mHandler.postDelayed(mUpdateBitrate, 500);
 			} else {
 				postBitRate(0);
 			}

@@ -15,7 +15,7 @@ The first step you will need to achieve to start a streaming session to some pee
 
 The full javadoc documentation of the API is available here: http://majorkernelpanic.com/libstreaming/doc-v4
 
-## How it does it
+## How does it work? You should really read this, it's important!
 
 There are three ways on Android to get encoded data from the peripherals:
 
@@ -26,6 +26,8 @@ There are three ways on Android to get encoded data from the peripherals:
 ### Encoding with the MediaRecorder API
 
 The **MediaRecorder** API was not intended for streaming applications but can be used to retrieve encoded data from the peripherals of the phone.  The trick is to configure a MediaRecorder instance to write to a **LocalSocket** instead of a regular file (see **MediaStream.java**).
+
+Edit: as of Android Lollipop using a **LocalSocket** is not possible anymore for security reasons. But using a [**ParcelFileDescriptor**](http://developer.android.com/reference/android/os/ParcelFileDescriptor.html) does the trick. More details in the file **MediaStream.java**! ([Thanks to those guys for the insight](http://stackoverflow.com/questions/26990816/mediarecorder-issue-on-android-lollipop))
 
 This hack has some limitations:
 * Lip sync can be approximative.
@@ -130,7 +132,7 @@ This example is extracted from [this simple android app](https://github.com/fyhe
 	}	
 
 	@Override
-	public void onBitrareUpdate(long bitrate) {
+	public void onBitrateUpdate(long bitrate) {
         // Informs you of the bandwidth consumption of the streams
 		Log.d(TAG,"Bitrate: "+bitrate);
 	}
@@ -241,6 +243,4 @@ Visit [this github page](https://github.com/fyhertz/spydroid-ipcamera) to see ho
 Further information about Spydroid can be found on the google page of the project [here](https://spydroid-ipcamera.googlecode.com).
 The app. is also available on google play [here](https://play.google.com/store/apps/details?id=net.majorkernelpanic.spydroid).
 
-# Licensing
 
-This streaming stack is available under two licenses, the GPL and a commercial license. *If you are willing to integrate this project into a close source application, please contact me at fyhertz at gmail.com*. Thank you.

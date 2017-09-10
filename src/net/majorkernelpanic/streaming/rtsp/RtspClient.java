@@ -1,21 +1,19 @@
 /*
- * Copyright (C) 2011-2014 GUIGUI Simon, fyhertz@gmail.com
+ * Copyright (C) 2011-2015 GUIGUI Simon, fyhertz@gmail.com
+ *
+ * This file is part of libstreaming (https://github.com/fyhertz/libstreaming)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file is part of Spydroid (http://code.google.com/p/spydroid-ipcamera/)
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * Spydroid is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This source code is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this source code; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package net.majorkernelpanic.streaming.rtsp;
@@ -35,7 +33,6 @@ import java.util.Locale;
 import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import net.majorkernelpanic.streaming.Session;
 import net.majorkernelpanic.streaming.Stream;
 import net.majorkernelpanic.streaming.rtp.RtpSocket;
@@ -186,9 +183,9 @@ public class RtspClient {
 	}
 
 	/**
-	 * If authentication is enabled on the server, you need to call this with a valid username/password pair.
+	 * If authentication is enabled on the server, you need to call this with a valid login/password pair.
 	 * Only implements Digest Access Authentication according to RFC 2069.
-	 * @param username The username
+	 * @param username The login
 	 * @param password The password
 	 */
 	public void setCredentials(String username, String password) {
@@ -214,12 +211,12 @@ public class RtspClient {
 	}
 	
 	public boolean isStreaming() {
-		return mState==STATE_STARTED|mState==STATE_STARTING;
+		return mState==STATE_STARTED||mState==STATE_STARTING;
 	}
 
 	/**
 	 * Connects to the RTSP server to publish the stream, and the effectively starts streaming.
-	 * You need to call {@link #setServerAddress(String, int)} and optionnally {@link #setSession(Session)} 
+	 * You need to call {@link #setServerAddress(String, int)} and optionally {@link #setSession(Session)} 
 	 * and {@link #setCredentials(String, String)} before calling this.
 	 * Should be called of the main thread !
 	 */
@@ -250,7 +247,7 @@ public class RtspClient {
 					tryConnection();
 				} catch (Exception e) {
 					postError(ERROR_CONNECTION_FAILED, e);
-					abord();
+					abort();
 					return;
 				}
 				
@@ -261,7 +258,7 @@ public class RtspClient {
 						mHandler.post(mConnectionMonitor);
 					}
 				} catch (Exception e) {
-					abord();
+					abort();
 				}
 
 			}
@@ -281,7 +278,7 @@ public class RtspClient {
 				}
 				if (mState != STATE_STOPPED) {
 					mState = STATE_STOPPING;
-					abord();
+					abort();
 				}
 			}
 		});
@@ -292,7 +289,7 @@ public class RtspClient {
 		mHandler.getLooper().quit();
 	}
 	
-	private void abord() {
+	private void abort() {
 		try {
 			sendRequestTeardown();
 		} catch (Exception ignore) {}
@@ -323,7 +320,7 @@ public class RtspClient {
 		String request = "ANNOUNCE rtsp://"+mParameters.host+":"+mParameters.port+mParameters.path+" RTSP/1.0\r\n" +
 				"CSeq: " + (++mCSeq) + "\r\n" +
 				"Content-Length: " + body.length() + "\r\n" +
-				"Content-Type: application/sdp \r\n\r\n" +
+				"Content-Type: application/sdp\r\n\r\n" +
 				body;
 		Log.i(TAG,request.substring(0, request.indexOf("\r\n")));
 
@@ -337,12 +334,14 @@ public class RtspClient {
 			Log.v(TAG,"RTSP server name unknown");
 		}
 
-		try {
-			Matcher m = Response.rexegSession.matcher(response.headers.get("session"));
-			m.find();
-			mSessionID = m.group(1);
-		} catch (Exception e) {
-			throw new IOException("Invalid response from server. Session id: "+mSessionID);
+		if (response.headers.containsKey("session")) {
+			try {
+				Matcher m = Response.rexegSession.matcher(response.headers.get("session"));
+				m.find();
+				mSessionID = m.group(1);
+			} catch (Exception e) {
+				throw new IOException("Invalid response from server. Session id: "+mSessionID);
+			}
 		}
 
 		if (response.status == 401) {
@@ -371,7 +370,7 @@ public class RtspClient {
 					"Content-Length: " + body.length() + "\r\n" +
 					"Authorization: " + mAuthorization + "\r\n" +
 					"Session: " + mSessionID + "\r\n" +
-					"Content-Type: application/sdp \r\n\r\n" +
+					"Content-Type: application/sdp\r\n\r\n" +
 					body;
 
 			Log.i(TAG,request.substring(0, request.indexOf("\r\n")));
@@ -407,6 +406,17 @@ public class RtspClient {
 				mOutputStream.flush();
 				Response response = Response.parseResponse(mBufferedReader);
 				Matcher m;
+				
+				if (response.headers.containsKey("session")) {
+					try {
+						m = Response.rexegSession.matcher(response.headers.get("session"));
+						m.find();
+						mSessionID = m.group(1);
+					} catch (Exception e) {
+						throw new IOException("Invalid response from server. Session id: "+mSessionID);
+					}
+				}
+				
 				if (mParameters.transport == TRANSPORT_UDP) {
 					try {
 						m = Response.rexegTransport.matcher(response.headers.get("transport")); m.find();
@@ -502,7 +512,7 @@ public class RtspClient {
 						mHandler.post(mConnectionMonitor);
 						postMessage(MESSAGE_CONNECTION_RECOVERED);
 					} catch (Exception e) {
-						abord();
+						abort();
 					}
 				} catch (IOException e) {
 					mHandler.postDelayed(mRetryConnection,1000);
@@ -574,12 +584,12 @@ public class RtspClient {
 		public int status;
 		public HashMap<String,String> headers = new HashMap<String,String>();
 
-		/** Parse the method, uri & headers of a RTSP request */
+		/** Parse the method, URI & headers of a RTSP request */
 		public static Response parseResponse(BufferedReader input) throws IOException, IllegalStateException, SocketException {
 			Response response = new Response();
 			String line;
 			Matcher matcher;
-			// Parsing request method & uri
+			// Parsing request method & URI
 			if ((line = input.readLine())==null) throw new SocketException("Connection lost");
 			matcher = regexStatus.matcher(line);
 			matcher.find();

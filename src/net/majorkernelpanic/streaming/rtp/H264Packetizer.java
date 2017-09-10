@@ -1,27 +1,24 @@
 /*
- * Copyright (C) 2011-2014 GUIGUI Simon, fyhertz@gmail.com
- * 
+ * Copyright (C) 2011-2015 GUIGUI Simon, fyhertz@gmail.com
+ *
  * This file is part of libstreaming (https://github.com/fyhertz/libstreaming)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * Spydroid is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * This source code is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this source code; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package net.majorkernelpanic.streaming.rtp;
 
 import java.io.IOException;
-
 import android.annotation.SuppressLint;
 import android.util.Log;
 
@@ -78,16 +75,25 @@ public class H264Packetizer extends AbstractPacketizer implements Runnable {
 		this.pps = pps;
 		this.sps = sps;
 
+		// A STAP-A NAL (NAL type 24) containing the sps and pps of the stream
 		if (pps != null && sps != null) {
-			// A STAP-A NAL (NAL type 24) containing the sps and pps of the stream
-			stapa = new byte[sps.length+pps.length+5];
+			// STAP-A NAL header + NALU 1 (SPS) size + NALU 2 (PPS) size = 5 bytes
+			stapa = new byte[sps.length + pps.length + 5];
+
+			// STAP-A NAL header is 24
 			stapa[0] = 24;
-			stapa[1] = (byte) (sps.length>>8);
-			stapa[2] = (byte) (sps.length&0xFF);
-			stapa[sps.length+1] = (byte) (pps.length>>8);
-			stapa[sps.length+2] = (byte) (pps.length&0xFF);
+
+			// Write NALU 1 size into the array (NALU 1 is the SPS).
+			stapa[1] = (byte) (sps.length >> 8);
+			stapa[2] = (byte) (sps.length & 0xFF);
+
+			// Write NALU 2 size into the array (NALU 2 is the PPS).
+			stapa[sps.length + 3] = (byte) (pps.length >> 8);
+			stapa[sps.length + 4] = (byte) (pps.length & 0xFF);
+
+			// Write NALU 1 into the array, then write NALU 2 into the array.
 			System.arraycopy(sps, 0, stapa, 3, sps.length);
-			System.arraycopy(pps, 0, stapa, 5+sps.length, pps.length);
+			System.arraycopy(pps, 0, stapa, 5 + sps.length, pps.length);
 		}
 	}	
 
@@ -177,7 +183,7 @@ public class H264Packetizer extends AbstractPacketizer implements Runnable {
 			}
 		}
 
-		// We send two packets containing NALU type 7 (sps) and 8 (pps)
+		// We send two packets containing NALU type 7 (SPS) and 8 (PPS)
 		// Those should allow the H264 stream to be decoded even if no SDP was sent to the decoder.
 		if (type == 5 && sps != null && pps != null) {
 			buffer = socket.requestBuffer();
